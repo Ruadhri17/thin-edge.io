@@ -9,10 +9,8 @@ pub enum TEdgeError {
 
     #[error("I/O error")]
     FromIo(#[from] std::io::Error),
-
     #[error(transparent)]
     FromPaths(#[from] tedge_utils::paths::PathsError),
-
     #[error(transparent)]
     FromTEdgeConfig(#[from] tedge_config::TEdgeConfigError),
 

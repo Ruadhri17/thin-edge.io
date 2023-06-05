@@ -32,7 +32,7 @@ tokio = { version = "1.23", default_features = false, features = [
     "time",
 ] }
 tracing = { version = "0.1", features = [] }
-users = "0.11.0"
+# users = "0.11.0"
 
 [dev-dependencies]
 assert_matches = "1.5"

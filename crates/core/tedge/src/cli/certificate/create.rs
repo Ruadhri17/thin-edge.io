@@ -73,7 +73,7 @@ impl CreateCertCmd {
     }
 }
 
-fn create_new_file(path: impl AsRef<Path>, user: &str, group: &str) -> Result<File, CertError> {
+fn create_new_file(path: impl AsRef<Path>, _user: &str, _group: &str) -> Result<File, CertError> {
     let file = OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -82,6 +82,7 @@ fn create_new_file(path: impl AsRef<Path>, user: &str, group: &str) -> Result<Fi
     // Ignore errors - This was the behavior with the now deprecated user manager.
     // - When `tedge cert create` is not run as root, a certificate is created but owned by the user running the command.
     // - A better approach could be to remove this `chown` and run the command as mosquitto.
+    #[cfg(not(target_os = "windows"))]
     let _ = tedge_utils::file::change_user_and_group(path.as_ref(), user, group);
 
     Ok(file)

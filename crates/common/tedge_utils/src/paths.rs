@@ -108,7 +108,7 @@ impl Write for DraftFile {
 }
 
 /// Set the permission modes of a Unix file.
-#[cfg(not(windows))]
+#[cfg(not(target_os = "windows"))]
 pub fn set_permission(file: &File, mode: u32) -> Result<(), std::io::Error> {
     use std::os::unix::fs::PermissionsExt;
     let mut perm = file.metadata()?.permissions();
@@ -119,7 +119,7 @@ pub fn set_permission(file: &File, mode: u32) -> Result<(), std::io::Error> {
 /// On windows, no file permission modes are changed.
 ///
 /// So Windows might be used for dev even if not supported.
-#[cfg(windows)]
+#[cfg(target_os = "windows")]
 pub fn set_permission(_file: &File, _mode: u32) -> Result<(), std::io::Error> {
     Ok(())
 }
@@ -150,14 +150,14 @@ mod tests {
     use assert_matches::assert_matches;
 
     #[test]
-    #[cfg(unix)] // On windows the error is unexpectedly RelativePathNotPermitted
+    #[cfg(target_os = "unix")] // On windows the error is unexpectedly RelativePathNotPermitted
     fn validate_path_non_existent() {
         let result = validate_parent_dir_exists(Path::new("/non/existent/path"));
         assert_matches!(result.unwrap_err(), PathsError::DirNotFound { .. });
     }
 
     #[test]
-    #[cfg(unix)] // On windows the error is unexpectedly RelativePathNotPermitted
+    #[cfg(target_os = "unix")] // On windows the error is unexpectedly RelativePathNotPermitted
     fn validate_parent_dir_non_existent() {
         let result = validate_parent_dir_exists(Path::new("/"));
         assert_matches!(result.unwrap_err(), PathsError::ParentDirNotFound { .. });
