@@ -143,17 +143,17 @@ fn run_op(apt: AptCli) -> Result<ExitStatus, InternalError> {
                 match config.apt.dpk.options.config {
                     tedge_config::AptConfig::KeepOld => run_cmd(
                         "apt-get",
-                        &format!(" --quiet --yes -o DPkg::Options::=--force-confold  install --allow-downgrades {}", installer),
+                        &format!(" --quiet --yes -o DPkg::Options::=--force-confold  install --allow-downgrades  --no-install-recommends {}", installer),
                     )?,
                     tedge_config::AptConfig::KeepNew => run_cmd(
                         "apt-get",
-                        &format!(" --quiet --yes -o DPkg::Options::=--force-confnew install --allow-downgrades {}", installer),
+                        &format!(" --quiet --yes -o DPkg::Options::=--force-confnew install --allow-downgrades --no-install-recommends {}", installer),
                     )?,
                 }
             } else {
                 run_cmd(
                     "apt-get",
-                    &format!("install -o DPkg::Options::=\"--force-confnew\" --quiet --yes --allow-downgrades {}", installer),
+                    &format!("install -o DPkg::Options::=\"--force-confnew\" --quiet --yes --allow-downgrades --no-install-recommends {}", installer),
                 )?
             }
         }
@@ -183,7 +183,12 @@ fn run_op(apt: AptCli) -> Result<ExitStatus, InternalError> {
             // Maintaining this metadata list to keep the debian package symlinks until the installation is complete,
             // which will get cleaned up once it goes out of scope after this block
             let mut metadata_vec = Vec::new();
-            let mut args: Vec<String> = vec!["install".into(), "--quiet".into(), "--yes".into()];
+            let mut args: Vec<String> = vec![
+                "install".into(),
+                "--quiet".into(),
+                "--yes".into(),
+                " --no-install-recommends".into(),
+            ];
             for update_module in updates {
                 match update_module.action {
                     UpdateAction::Install => {
