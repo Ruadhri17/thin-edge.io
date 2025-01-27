@@ -77,7 +77,7 @@ impl OperationContext {
                         .with_qos(QoS::AtLeastOnce);
 
                 Ok(OperationOutcome::Finished {
-                    messages: vec![c8y_notification, twin_metadata],
+                    messages: vec![twin_metadata, c8y_notification],
                 })
             }
             CommandStatus::Failed { reason } => Err(anyhow::anyhow!(reason).into()),
@@ -530,11 +530,11 @@ mod tests {
         assert_received_contains_str(
             &mut mqtt,
             [
-                ("c8y/s/us", "503,c8y_Firmware"), // SmartREST successful
                 (
                     "te/device/main///twin/firmware",
                     r#"{"name":"myFirmware","version":"1.0","url":"http://www.my.url"}"#,
                 ), // Twin firmware metadata
+                ("c8y/s/us", "503,c8y_Firmware"), // SmartREST successful
                 ("te/device/main///cmd/firmware_update/c8y-mapper-1234", ""), // Clear cmd
             ],
         )
@@ -579,11 +579,11 @@ mod tests {
         assert_received_contains_str(
             &mut mqtt,
             [
-                ("c8y/s/us/test-device:device:child1", "503,c8y_Firmware"), // SmartREST successful
                 (
                     "te/device/child1///twin/firmware",
                     r#"{"name":"myFirmware","version":"1.0","url":"http://www.my.url"}"#,
                 ), // Twin firmware metadata
+                ("c8y/s/us/test-device:device:child1", "503,c8y_Firmware"), // SmartREST successful
                 ("te/device/child1///cmd/firmware_update/c8y-mapper-1234", ""), // Clear cmd
             ],
         )
@@ -623,11 +623,11 @@ mod tests {
         assert_received_contains_str(
             &mut mqtt,
             [
-                ("c8y/s/us", "506,1234"), // SmartREST successful
                 (
                     "te/device/main///twin/firmware",
                     r#"{"name":"myFirmware","version":"1.0","url":"http://www.my.url"}"#,
                 ), // Twin firmware metadata
+                ("c8y/s/us", "506,1234"), // SmartREST successful
                 ("te/device/main///cmd/firmware_update/c8y-mapper-1234", ""), // Clear cmd
             ],
         )

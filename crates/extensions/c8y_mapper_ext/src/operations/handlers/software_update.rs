@@ -49,8 +49,8 @@ impl OperationContext {
 
                 Ok(OperationOutcome::Finished {
                     messages: vec![
-                        MqttMessage::new(topic, smartrest_set_operation),
                         self.request_software_list(&target.topic_id),
+                        MqttMessage::new(topic, smartrest_set_operation),
                     ],
                 })
             }
@@ -64,8 +64,8 @@ impl OperationContext {
 
                 Ok(OperationOutcome::Finished {
                     messages: vec![
-                        MqttMessage::new(topic, smartrest_set_operation),
                         self.request_software_list(&target.topic_id),
+                        MqttMessage::new(topic, smartrest_set_operation),
                     ],
                 })
             }
@@ -197,9 +197,6 @@ mod tests {
             .await
             .expect("Send failed");
 
-        // Expect `503` messages with correct payload have been received on `c8y/s/us`, if no msg received for the timeout the test fails.
-        assert_received_contains_str(&mut mqtt, [("c8y/s/us", "503,c8y_SoftwareUpdate")]).await;
-
         // An updated list of software is requested
         assert_received_contains_str(
             &mut mqtt,
@@ -209,6 +206,9 @@ mod tests {
             )],
         )
         .await;
+
+        // Expect `503` messages with correct payload have been received on `c8y/s/us`, if no msg received for the timeout the test fails.
+        assert_received_contains_str(&mut mqtt, [("c8y/s/us", "503,c8y_SoftwareUpdate")]).await;
 
         // The successful state is cleared
         assert_received_contains_str(
@@ -254,9 +254,6 @@ mod tests {
             .await
             .expect("Send failed");
 
-        // Expect `506` messages with correct payload have been received on `c8y/s/us`, if no msg received for the timeout the test fails.
-        assert_received_contains_str(&mut mqtt, [("c8y/s/us", "506,123")]).await;
-
         // An updated list of software is requested
         assert_received_contains_str(
             &mut mqtt,
@@ -266,6 +263,9 @@ mod tests {
             )],
         )
         .await;
+
+        // Expect `506` messages with correct payload have been received on `c8y/s/us`, if no msg received for the timeout the test fails.
+        assert_received_contains_str(&mut mqtt, [("c8y/s/us", "506,123")]).await;
 
         // The successful state is cleared
         assert_received_contains_str(
@@ -294,22 +294,22 @@ mod tests {
             .await
             .expect("Send failed");
 
-        // `502` messages with correct payload have been received on `c8y/s/us`, if no msg received for the timeout the test fails.
-        assert_received_contains_str(
-            &mut mqtt,
-            [(
-                "c8y/s/us",
-                "502,c8y_SoftwareUpdate,Partial failure: Couldn't install collectd and nginx",
-            )],
-        )
-        .await;
-
         // An updated list of software is requested
         assert_received_contains_str(
             &mut mqtt,
             [(
                 "te/device/main///cmd/software_list/+",
                 r#"{"status":"init"}"#,
+            )],
+        )
+        .await;
+
+        // `502` messages with correct payload have been received on `c8y/s/us`, if no msg received for the timeout the test fails.
+        assert_received_contains_str(
+            &mut mqtt,
+            [(
+                "c8y/s/us",
+                "502,c8y_SoftwareUpdate,Partial failure: Couldn't install collectd and nginx",
             )],
         )
         .await;
@@ -345,22 +345,22 @@ mod tests {
             .await
             .expect("Send failed");
 
-        // `505` messages with correct payload have been received on `c8y/s/us`, if no msg received for the timeout the test fails.
-        assert_received_contains_str(
-            &mut mqtt,
-            [(
-                "c8y/s/us",
-                "505,123,Partial failure: Couldn't install collectd and nginx",
-            )],
-        )
-        .await;
-
         // An updated list of software is requested
         assert_received_contains_str(
             &mut mqtt,
             [(
                 "te/device/main///cmd/software_list/+",
                 r#"{"status":"init"}"#,
+            )],
+        )
+        .await;
+
+        // `505` messages with correct payload have been received on `c8y/s/us`, if no msg received for the timeout the test fails.
+        assert_received_contains_str(
+            &mut mqtt,
+            [(
+                "c8y/s/us",
+                "505,123,Partial failure: Couldn't install collectd and nginx",
             )],
         )
         .await;
