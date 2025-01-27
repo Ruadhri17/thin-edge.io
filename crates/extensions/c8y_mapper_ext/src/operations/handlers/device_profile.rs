@@ -2,8 +2,13 @@ use anyhow::Context;
 use c8y_api::smartrest::inventory::set_c8y_profile_target_payload;
 use c8y_api::smartrest::smartrest_serializer::CumulocitySupportedOperations;
 use tedge_api::device_profile::DeviceProfileCmd;
+use tedge_api::device_profile::Operation;
+use tedge_api::device_profile::OperationPayload;
+use tedge_api::mqtt_topics::Channel;
 use tedge_api::CommandStatus;
+use tedge_api::Jsonify;
 use tedge_mqtt_ext::MqttMessage;
+use tedge_mqtt_ext::QoS;
 use tracing::warn;
 
 use super::EntityTarget;
@@ -49,22 +54,53 @@ impl OperationContext {
                 })
             }
             CommandStatus::Successful => {
-                let c8y_target_profile =
-                    MqttMessage::new(sm_topic, set_c8y_profile_target_payload(true)); // Set the target profile as executed
+                let mut messages = Vec::new();
+
+                for operation in command.payload.operations {
+                    if let Operation::WithPayload(payload) = operation.operation {
+                        let message = match payload {
+                            OperationPayload::Firmware(firmware) => {
+                                let twin_metadata_topic = self.mqtt_schema.topic_for(
+                                    &target.topic_id,
+                                    &Channel::EntityTwinData {
+                                        fragment_key: "firmware".to_string(),
+                                    },
+                                );
+
+                                Some(
+                                    MqttMessage::new(&twin_metadata_topic, firmware.to_json())
+                                        .with_retain()
+                                        .with_qos(QoS::AtLeastOnce),
+                                )
+                            }
+                            OperationPayload::Software(_) => {
+                                Some(self.request_software_list(&target.topic_id))
+                            }
+                            // We skip installation state update for config as it is applicable
+                            // only for latest typed file-based configuration updates
+                            // which currently are not supported by thin-edge
+                            OperationPayload::Config(_) => None,
+                        };
+
+                        if let Some(message) = message {
+                            messages.push(message);
+                        }
+                    };
+                }
+
+                // set the target profile as executed
+                messages.push(MqttMessage::new(
+                    sm_topic,
+                    set_c8y_profile_target_payload(true),
+                ));
 
                 let smartrest_set_operation = self.get_smartrest_successful_status_payload(
                     CumulocitySupportedOperations::C8yDeviceProfile,
                     cmd_id,
                 );
-                let c8y_notification = MqttMessage::new(sm_topic, smartrest_set_operation);
+                messages.push(MqttMessage::new(sm_topic, smartrest_set_operation));
 
-                Ok(OperationOutcome::Finished {
-                    messages: vec![
-                        c8y_target_profile,
-                        c8y_notification,
-                        self.request_software_list(&target.topic_id),
-                    ],
-                })
+                Ok(OperationOutcome::Finished { messages })
             }
             CommandStatus::Failed { reason } => {
                 let smartrest_set_operation = self.get_smartrest_failed_status_payload(
@@ -76,8 +112,8 @@ impl OperationContext {
 
                 Ok(OperationOutcome::Finished {
                     messages: vec![
-                        c8y_notification,
                         self.request_software_list(&target.topic_id),
+                        c8y_notification,
                     ],
                 })
             }
@@ -1128,13 +1164,6 @@ mod tests {
         .await
         .expect("Send failed");
 
-        // Expect `502` smartrest message on `c8y/s/us`.
-        assert_received_contains_str(
-            &mut mqtt,
-            [("c8y/s/us", "502,c8y_DeviceProfile,Something went wrong")],
-        )
-        .await;
-
         // An updated list of software is requested
         assert_received_contains_str(
             &mut mqtt,
@@ -1142,6 +1171,13 @@ mod tests {
                 "te/device/main///cmd/software_list/+",
                 r#"{"status":"init"}"#,
             )],
+        )
+        .await;
+
+        // Expect `502` smartrest message on `c8y/s/us`.
+        assert_received_contains_str(
+            &mut mqtt,
+            [("c8y/s/us", "502,c8y_DeviceProfile,Something went wrong")],
         )
         .await;
     }
@@ -1281,22 +1317,22 @@ mod tests {
         .await
         .expect("Send failed");
 
-        // Expect `502` smartrest message on `c8y/s/us`.
-        assert_received_contains_str(
-            &mut mqtt,
-            [(
-                "c8y/s/us/child1",
-                "502,c8y_DeviceProfile,Something went wrong",
-            )],
-        )
-        .await;
-
         // An updated list of software is requested
         assert_received_contains_str(
             &mut mqtt,
             [(
                 "te/device/child1///cmd/software_list/+",
                 r#"{"status":"init"}"#,
+            )],
+        )
+        .await;
+
+        // Expect `502` smartrest message on `c8y/s/us`.
+        assert_received_contains_str(
+            &mut mqtt,
+            [(
+                "c8y/s/us/child1",
+                "502,c8y_DeviceProfile,Something went wrong",
             )],
         )
         .await;
@@ -1430,10 +1466,6 @@ mod tests {
         .await
         .expect("Send failed");
 
-        // Expect `505` smartrest message on `c8y/s/us`.
-        assert_received_contains_str(&mut mqtt, [("c8y/s/us", "505,123456,Something went wrong")])
-            .await;
-
         // An updated list of software is requested
         assert_received_contains_str(
             &mut mqtt,
@@ -1443,6 +1475,10 @@ mod tests {
             )],
         )
         .await;
+
+        // Expect `505` smartrest message on `c8y/s/us`.
+        assert_received_contains_str(&mut mqtt, [("c8y/s/us", "505,123456,Something went wrong")])
+            .await;
     }
 
     #[tokio::test]
@@ -1508,11 +1544,15 @@ mod tests {
         .await
         .expect("Send failed");
 
-        // Expect `121` smartrest message on `c8y/s/us`.
-        assert_received_contains_str(&mut mqtt, [("c8y/s/us", "121,true")]).await;
-
-        // Expect `503` smartrest message on `c8y/s/us`.
-        assert_received_contains_str(&mut mqtt, [("c8y/s/us", "503,c8y_DeviceProfile")]).await;
+        // Expect twin firmware metadata.
+        assert_received_contains_str(
+            &mut mqtt,
+            [(
+                "te/device/main///twin/firmware",
+                r#"{"name":"test-firmware","version":"1.0","remoteUrl":"http://www.my.url"}"#,
+            )],
+        )
+        .await;
 
         // An updated list of software is requested
         assert_received_contains_str(
@@ -1523,6 +1563,12 @@ mod tests {
             )],
         )
         .await;
+
+        // Expect `121` smartrest message on `c8y/s/us`.
+        assert_received_contains_str(&mut mqtt, [("c8y/s/us", "121,true")]).await;
+
+        // Expect `503` smartrest message on `c8y/s/us`.
+        assert_received_contains_str(&mut mqtt, [("c8y/s/us", "503,c8y_DeviceProfile")]).await;
     }
 
     #[tokio::test]
@@ -1598,12 +1644,15 @@ mod tests {
         .await
         .expect("Send failed");
 
-        // Expect `121` smartrest message on `c8y/s/us`.
-        assert_received_contains_str(&mut mqtt, [("c8y/s/us/child1", "121,true")]).await;
-
-        // Expect `503` smartrest message on `c8y/s/us`.
-        assert_received_contains_str(&mut mqtt, [("c8y/s/us/child1", "503,c8y_DeviceProfile")])
-            .await;
+        // Expect twin firmware metadata.
+        assert_received_contains_str(
+            &mut mqtt,
+            [(
+                "te/device/child1///twin/firmware",
+                r#"{"name":"test-firmware","version":"1.0","remoteUrl":"http://www.my.url"}"#,
+            )],
+        )
+        .await;
 
         // An updated list of software is requested
         assert_received_contains_str(
@@ -1614,6 +1663,13 @@ mod tests {
             )],
         )
         .await;
+
+        // Expect `121` smartrest message on `c8y/s/us`.
+        assert_received_contains_str(&mut mqtt, [("c8y/s/us/child1", "121,true")]).await;
+
+        // Expect `503` smartrest message on `c8y/s/us`.
+        assert_received_contains_str(&mut mqtt, [("c8y/s/us/child1", "503,c8y_DeviceProfile")])
+            .await;
     }
 
     #[tokio::test]
@@ -1683,11 +1739,15 @@ mod tests {
         .await
         .expect("Send failed");
 
-        // Expect `121` smartrest message on `c8y/s/us`.
-        assert_received_contains_str(&mut mqtt, [("c8y/s/us", "121,true")]).await;
-
-        // Expect `506` smartrest message on `c8y/s/us`.
-        assert_received_contains_str(&mut mqtt, [("c8y/s/us", "506,123456")]).await;
+        // Expect twin firmware metadata.
+        assert_received_contains_str(
+            &mut mqtt,
+            [(
+                "te/device/main///twin/firmware",
+                r#"{"name":"test-firmware","version":"1.0","remoteUrl":null}"#,
+            )],
+        )
+        .await;
 
         // An updated list of software is requested
         assert_received_contains_str(
@@ -1698,5 +1758,11 @@ mod tests {
             )],
         )
         .await;
+
+        // Expect `121` smartrest message on `c8y/s/us`.
+        assert_received_contains_str(&mut mqtt, [("c8y/s/us", "121,true")]).await;
+
+        // Expect `506` smartrest message on `c8y/s/us`.
+        assert_received_contains_str(&mut mqtt, [("c8y/s/us", "506,123456")]).await;
     }
 }
