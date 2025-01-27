@@ -462,7 +462,7 @@ impl From<C8yDownloadConfigFile> for ConfigPayload {
     fn from(value: C8yDownloadConfigFile) -> Self {
         ConfigPayload {
             config_type: value.config_type,
-            remote_url: Some(value.url),
+            remote_url: value.url,
         }
     }
 }
